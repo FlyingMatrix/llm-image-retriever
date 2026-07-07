@@ -1,5 +1,7 @@
 import os
+import sys
 import json
+import argparse
 import chromadb
 from PIL import Image
 import ollama
@@ -7,26 +9,24 @@ from pydantic import BaseModel
 from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction
 from chromadb.utils.data_loaders import ImageLoader
 
+# Define the structured schema for the LLM
 class SearchParameters(BaseModel):
     search_term: str
     project_filter: str | None
 
-# 1. Initialize ChromaDB with its native ImageLoader
+# Initialize ChromaDB and dependencies globally
 client = chromadb.PersistentClient(path="./chroma_db")
 image_loader = ImageLoader()
 embedding_function = OpenCLIPEmbeddingFunction()
 
-# The collection needs the data_loader specified to handle image paths natively
 collection = client.get_or_create_collection(
     name="project_images", 
     embedding_function=embedding_function,
     data_loader=image_loader
 )
 
-# 2. Optimized LLM Intent Parser
 def parse_query_with_llm(user_prompt: str, valid_projects: list) -> SearchParameters:
     """Extracts search terms and maps the requested project to a strict valid list."""
-    
     system_instruction = (
         "You are an expert AI assistant for a local image search pipeline.\n"
         "Your task is to isolate what object/file description the user wants to see, "
@@ -52,14 +52,14 @@ def parse_query_with_llm(user_prompt: str, valid_projects: list) -> SearchParame
     result_json = json.loads(response['message']['content'])
     return SearchParameters(**result_json)
 
-# 3. Robust Ingestion Script
-def index_images(base_folder: str):
-    """Indexes local files properly using Chroma's URIs tracking."""
+def handle_ingest(base_folder: str):
+    """Scans local project directories and builds/updates the vector database."""
     supported = ('.png', '.jpg', '.jpeg', '.webp')
     if not os.path.exists(base_folder):
-        print(f"Directory {base_folder} not found. Please create it first.")
-        return
+        print(f"[ERROR] Directory '{base_folder}' does not exist.")
+        sys.exit(1)
 
+    print(f"Scanning '{base_folder}' for images...")
     ids, uris, metadatas = [], [], []
     
     for project_name in os.listdir(base_folder):
@@ -70,34 +70,94 @@ def index_images(base_folder: str):
                     file_path = os.path.abspath(os.path.join(project_path, file_name))
                     
                     ids.append(file_path)
-                    uris.append(file_path) # Direct path to image file
+                    uris.append(file_path)
                     metadatas.append({"project": project_name, "path": file_path})
 
     if ids:
-        # ChromaDB uses uris + data_loader to calculate visual vector spaces seamlessly
         collection.add(ids=ids, uris=uris, metadatas=metadatas)
-        print(f"Indexed {len(ids)} images successfully.")
+        print(f"[SUCCESS] Indexed {len(ids)} images successfully into ChromaDB.")
+    else:
+        print("[WARNING] No supported images found to index.")
 
-# 4. Retrieval Script
-def dynamic_retrieve(human_query: str, base_folder: str):
-    """Parses natural sentence and searches database with case-safe constraints."""
-    print(f"\nUser Query: '{human_query}'")
+def handle_query(human_query: str):
+    """Uses a dynamic baseline path to find valid projects, runs LLM parsing with 
+    strict text cleanup, and retrieves images using a hybrid case-insensitive 
+    filename-first + vector-fallback search approach."""
     
-    # Get local project list dynamically (e.g., ['biotronik', 'skon', 'smartray_methology'])
-    valid_projects = []
-    if os.path.exists(base_folder):
-        valid_projects = [f for f in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, f))]
+    # 1. Gather all data currently inside the database
+    all_data = collection.get(include=['metadatas', 'uris'])
+    all_metadata = all_data.get('metadatas', [])
+    all_uris = all_data.get('uris', [])
+    
+    # Get original project folder names from database
+    db_projects = list(set([m['project'] for m in all_metadata if m and 'project' in m]))
 
-    # Run LLM Intent Extraction
-    parsed_args = parse_query_with_llm(human_query, valid_projects)
-    print(f"-> Extracted Search Term: '{parsed_args.search_term}'")
-    print(f"-> Extracted Project Filter: '{parsed_args.project_filter}'")
+    if not db_projects:
+        print("[WARNING] The vector database is empty. Please run 'ingest' first.")
+        return
+
+    # ---- CASE SENSITIVITY ----
+    # Create a mapping dictionary: {'skon': 'SKON', 'biotronik': 'biotronik'}
+    # This allows us to map any LLM output back to the EXACT folder name in the database.
+    project_case_mapper = {p.lower(): p for p in db_projects}
     
-    # Enforce case-safe string evaluation against database
-    where_clause = {"project": parsed_args.project_filter} if parsed_args.project_filter else None
+    print("Parsing intent with local LLM...")
+    # Feed lowercase names to the LLM to standardize expectations
+    parsed_args = parse_query_with_llm(human_query, list(project_case_mapper.keys()))
+    
+    # ---- STEP 2: PYTHON CLEANUP SAFEGUARD ----
+    raw_search = parsed_args.search_term.lower().strip()
+    llm_project = parsed_args.project_filter.lower().strip() if parsed_args.project_filter else None
+    
+    # Map the LLM's lowercase response back to the true database casing
+    project_filter = project_case_mapper.get(llm_project) if llm_project else None
+    
+    # Remove leading filler phrases safely
+    filler_phrases = ["picture of", "image of", "photo of", "screenshot of", "a view of", "show me"]
+    for phrase in filler_phrases:
+        if raw_search.startswith(phrase):
+            raw_search = raw_search.replace(phrase, "").strip()
+            
+    # Safely strip out standalone words anywhere
+    words = raw_search.split()
+    cleaned_words = [w for w in words if w not in ["image", "photo", "picture", "a", "an", "the"]]
+    search_term = " ".join(cleaned_words).strip()
+    
+    if not search_term:
+        search_term = raw_search
+
+    print(f"-> Extracted Search Term (Cleaned): '{search_term}'")
+    print(f"-> Extracted Project Filter (Case Corrected): '{project_filter}'")
+    
+    # ---- STEP 3: HARD STRING FILENAME MATCH ----
+    filename_matches = []
+    for uri, meta in zip(all_uris, all_metadata):
+        if not uri or not meta:
+            continue
+            
+        # Enforce case-corrected project filter
+        if project_filter and meta.get('project') != project_filter:
+            continue
+            
+        filename = os.path.basename(uri).lower()
+        
+        # Look for literal string intersection
+        if search_term in filename:
+            filename_matches.append((uri, meta))
+
+    if filename_matches:
+        best_match_id, metadata = filename_matches[0]
+        print(f"\n[SUCCESS] Exact Filename Match Found!")
+        print(f"Citation Path: {metadata['path']}\n")
+        Image.open(best_match_id).show()
+        return
+
+    # ---- STEP 4: SEMANTIC VECTOR SEARCH (Fallback) ----
+    print("No exact filename match. Falling back to semantic visual search...")
+    where_clause = {"project": project_filter} if project_filter else None
     
     results = collection.query(
-        query_texts=[parsed_args.search_term],
+        query_texts=[search_term],
         n_results=1,
         where=where_clause
     )
@@ -106,23 +166,31 @@ def dynamic_retrieve(human_query: str, base_folder: str):
         best_match_id = results['ids'][0][0]
         metadata = results['metadatas'][0][0]
         
-        print(f"\n[SUCCESS] Match Found!")
+        print(f"\n[SUCCESS] Semantic Match Found!")
         print(f"Citation Path: {metadata['path']}\n")
-        return Image.open(best_match_id), metadata['path']
+        Image.open(best_match_id).show()
     else:
-        print("\n[WARNING] No matching images found in database setup.\n")
-        return None, None
+        print("\n[WARNING] No matching images found in the database.\n")
+
+def main():
+    parser = argparse.ArgumentParser(description="CLI Image Retrieval Pipeline with ChromaDB and Local LLM")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Ingest command setup
+    ingest_parser = subparsers.add_parser("ingest", help="Scan folders and ingest images into the vector database")
+    ingest_parser.add_argument("path", type=str, help="Path to the 'projects' root folder")
+
+    # Query command setup
+    query_parser = subparsers.add_parser("query", help="Run a semantic natural language image search query")
+    query_parser.add_argument("text", type=str, help="The natural language query string wrapped in quotes")
+
+    args = parser.parse_args()
+
+    if args.command == "ingest":
+        handle_ingest(args.path)
+    elif args.command == "query":
+        handle_query(args.text)
 
 if __name__ == "__main__":
-    base_directory = "./projects" 
-    
-    # Step 1: Re-index your files using the updated structural ingestion logic
-    print("Refreshing vector database index...")
-    index_images(base_directory)
-    
-    # Step 2: Test Evaluation
-    query = "Show me an image of sample from the project of Biotronik."
-    img, path = dynamic_retrieve(query, base_directory)
-    
-    if img:
-        img.show()
+    main()
+
