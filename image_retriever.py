@@ -8,6 +8,7 @@ import ollama
 from pydantic import BaseModel
 from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction
 from chromadb.utils.data_loaders import ImageLoader
+from rich import print as rprint
 
 # Define the structured schema for the LLM
 class SearchParameters(BaseModel):
@@ -56,10 +57,10 @@ def handle_ingest(base_folder: str):
     """Scans local project directories and builds/updates the vector database."""
     supported = ('.png', '.jpg', '.jpeg', '.webp')
     if not os.path.exists(base_folder):
-        print(f"[ERROR] Directory '{base_folder}' does not exist.")
+        rprint(f"[red][ERROR] Directory '{base_folder}' does not exist.[/red]")
         sys.exit(1)
 
-    print(f"Scanning '{base_folder}' for images...")
+    rprint(f"[cyan]Scanning '{base_folder}' for images...[/cyan]")
     ids, uris, metadatas = [], [], []
     
     for project_name in os.listdir(base_folder):
@@ -75,9 +76,9 @@ def handle_ingest(base_folder: str):
 
     if ids:
         collection.add(ids=ids, uris=uris, metadatas=metadatas)
-        print(f"[SUCCESS] Indexed {len(ids)} images successfully into ChromaDB.")
+        rprint(f"[green][SUCCESS] Indexed {len(ids)} images successfully into ChromaDB.[/green]")
     else:
-        print("[WARNING] No supported images found to index.")
+        rprint("[red][WARNING] No supported images found to index.[/red]")
 
 def handle_query(human_query: str):
     """Uses a dynamic baseline path to find valid projects, runs LLM parsing with 
@@ -93,7 +94,7 @@ def handle_query(human_query: str):
     db_projects = list(set([m['project'] for m in all_metadata if m and 'project' in m]))
 
     if not db_projects:
-        print("[WARNING] The vector database is empty. Please run 'ingest' first.")
+        rprint("[red][WARNING] The vector database is empty. Please run 'ingest' first.[/red]")
         return
 
     # ---- CASE SENSITIVITY ----
@@ -101,7 +102,7 @@ def handle_query(human_query: str):
     # This allows us to map any LLM output back to the EXACT folder name in the database.
     project_case_mapper = {p.lower(): p for p in db_projects}
     
-    print("Parsing intent with local LLM...")
+    rprint("[cyan]Parsing intent with local LLM...[/cyan]")
     # Feed lowercase names to the LLM to standardize expectations
     parsed_args = parse_query_with_llm(human_query, list(project_case_mapper.keys()))
     
@@ -126,8 +127,8 @@ def handle_query(human_query: str):
     if not search_term:
         search_term = raw_search
 
-    print(f"-> Extracted Search Term (Cleaned): '{search_term}'")
-    print(f"-> Extracted Project Filter (Case Corrected): '{project_filter}'")
+    rprint(f"[cyan]-> Extracted Search Term (Cleaned): '{search_term}'[/cyan]")
+    rprint(f"[cyan]-> Extracted Project Filter (Case Corrected): '{project_filter}'[/cyan]")
     
     # ---- STEP 3: HARD STRING FILENAME MATCH ----
     filename_matches = []
@@ -147,13 +148,13 @@ def handle_query(human_query: str):
 
     if filename_matches:
         best_match_id, metadata = filename_matches[0]
-        print(f"\n[SUCCESS] Exact Filename Match Found!")
+        rprint(f"\n[green][SUCCESS] Exact Filename Match Found![/green]")
         print(f"Citation Path: {metadata['path']}\n")
         Image.open(best_match_id).show()
         return
 
     # ---- STEP 4: SEMANTIC VECTOR SEARCH (Fallback) ----
-    print("No exact filename match. Falling back to semantic visual search...")
+    rprint("[yellow]No exact filename match. Falling back to semantic visual search...[/yellow]")
     where_clause = {"project": project_filter} if project_filter else None
     
     results = collection.query(
@@ -166,11 +167,11 @@ def handle_query(human_query: str):
         best_match_id = results['ids'][0][0]
         metadata = results['metadatas'][0][0]
         
-        print(f"\n[SUCCESS] Semantic Match Found!")
+        rprint(f"\n[green][SUCCESS] Semantic Match Found![/green]")
         print(f"Citation Path: {metadata['path']}\n")
         Image.open(best_match_id).show()
     else:
-        print("\n[WARNING] No matching images found in the database.\n")
+        rprint("\n[red][WARNING] No matching images found in the database.[/red]\n")
 
 def main():
     parser = argparse.ArgumentParser(description="CLI Image Retrieval Pipeline with ChromaDB and Local LLM")
