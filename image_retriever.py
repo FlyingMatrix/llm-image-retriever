@@ -182,14 +182,14 @@ def main():
     ingest_parser.add_argument("path", type=str, help="Path to the 'projects' root folder")
 
     # Query command setup
-    query_parser = subparsers.add_parser("query", help="Run a semantic natural language image search query")
+    query_parser = subparsers.add_parser("search", help="Run a semantic natural language image search query")
     query_parser.add_argument("text", type=str, help="The natural language query string wrapped in quotes")
 
     args = parser.parse_args()
 
     if args.command == "ingest":
         handle_ingest(args.path)
-    elif args.command == "query":
+    elif args.command == "search":
         handle_query(args.text)
 
 if __name__ == "__main__":
