@@ -160,18 +160,26 @@ def handle_query(human_query: str):
     results = collection.query(
         query_texts=[search_term],
         n_results=1,
-        where=where_clause
+        where=where_clause,
+        include=['metadatas', 'distances']  # Explicitly request distances from ChromaDB
     )
     
     if results['ids'] and results['ids'][0]:
         best_match_id = results['ids'][0][0]
         metadata = results['metadatas'][0][0]
+        distance = results['distances'][0][0]
         
-        rprint(f"\n[green][SUCCESS] Semantic Match Found![/green]")
-        print(f"Citation Path: {metadata['path']}\n")
-        Image.open(best_match_id).show()
+        # ENFORCE DISTANCE THRESHOLD: 0.0 to 0.5 usually means highly relevant or identical.
+        DISTANCE_THRESHOLD = 0.5
+        
+        if distance <= DISTANCE_THRESHOLD:
+            rprint(f"\n[green][SUCCESS] Semantic Match Found! (Distance: {distance:.4f})[/green]")
+            print(f"Citation Path: {metadata['path']}\n")
+            Image.open(best_match_id).show()
+        else:
+            rprint(f"\n[red][WARNING] No closely related images found in the database.[/red]\n")
     else:
-        rprint("\n[red][WARNING] No matching images found in the database.[/red]\n")
+        rprint("\n[red][WARNING] No matching images found in the database. [/red]\n")
 
 def main():
     parser = argparse.ArgumentParser(description="CLI Image Retrieval Pipeline with ChromaDB and Local LLM")
@@ -194,4 +202,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
