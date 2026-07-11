@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Local Image Search Pipeline</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+        input { flex: 1; padding: 10px; font-size: 16px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #result { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 20px; display: none; }
+        img { max-width: 100%; height: auto; margin-top: 15px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .citation { color: #555; font-style: italic; background: #f4f4f4; padding: 10px; border-left: 4px solid #007BFF; }
+        
+        /* New Style for Error Handling */
+        .error-message { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background-color: #fce8e6; 
+            color: #c5221f; 
+            border-left: 4px solid #d93025; 
+            border-radius: 4px;
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Project Image Search</h2>
+    <div class="search-box">
+        <input type="text" id="queryInput" placeholder="e.g., show me a sample image from biotronik project">
+        <button onclick="runSearch()">Search</button>
+    </div>
+
+    <div id="loading" style="display:none; color: #666;">Parsing with local LLM and database...</div>
+
+    <div id="errorMessage" class="error-message"></div>
+
+    <div id="result">
+        <h3>Search Result (<span id="matchType"></span>)</h3>
+        <p class="citation"><strong>Citation Path:</strong> <span id="citationPath"></span></p>
+        <div id="imageContainer"></div>
+    </div>
+
+    <script>
+        async function runSearch() {
+            const query = document.getElementById('queryInput').value;
+            if (!query) return;
+
+            // Reset UI states
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                document.getElementById('loading').style.display = 'none';
+
+                if (data.status === 'success') {
+                    document.getElementById('result').style.display = 'block';
+                    document.getElementById('matchType').innerText = data.type.toUpperCase() + " MATCH";
+                    document.getElementById('citationPath').innerText = data.citation;
+                    
+                    // Request the image via your Node.js image serving endpoint
+                    document.getElementById('imageContainer').innerHTML = `
+                        <img src="/api/image?path=${encodeURIComponent(data.image_path)}" alt="Search Result">
+                    `;
+                } else {
+                    // Display backend error message directly on the page instead of an alert
+                    showError(data.message || "No matching images found.");
+                }
+            } catch (err) {
+                document.getElementById('loading').style.display = 'none';
+                // Display network/fetch error directly on the page
+                showError("An error occurred running the search.");
+            }
+        }
+
+        // Helper function to handle inline error presentation
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.innerText = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
