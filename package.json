@@ -1,0 +1,24 @@
+{
+  "name": "llm-image-retriever",
+  "version": "1.0.0",
+  "description": "LLM-based image retrieval pipeline.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FlyingMatrix/llm-image-retriever.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/FlyingMatrix/llm-image-retriever/issues"
+  },
+  "homepage": "https://github.com/FlyingMatrix/llm-image-retriever#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
