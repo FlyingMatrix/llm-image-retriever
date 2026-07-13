@@ -88,14 +88,14 @@
         /* Updated Tooltip to Match Search Button Shape & Border Styling */
         .tooltip {
             position: absolute;
-            bottom: 135%;                               /* Places it perfectly above the button */
+            bottom: 135%; 
             left: 50%;
             transform: translateX(-50%) scale(0.85);
-            background-color: #ffffff;                /* White background filled in */
-            border: 2px solid #007BFF;                /* Blue border */
-            color: #333333;                           /* Dark-grey font color */
+            background-color: #ffffff;
+            border: 2px solid #007BFF;
+            color: #333333;
             padding: 6px 12px;
-            border-radius: 6px;                         /* Same shape border-radius as buttons */
+            border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
             white-space: nowrap;
@@ -103,21 +103,21 @@
             visibility: hidden;
             transition: opacity 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28), transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-            pointer-events: none;                       /* Prevents mouse hover interference */
+            pointer-events: none; 
         }
 
         /* Updated Tooltip Pointer Triangle (Matching White/Blue Border Theme) */
         .tooltip::after {
             content: "";
             position: absolute;
-            bottom: -5px;                               /* Shifts bottom point of the triangle slightly down */
+            bottom: -5px;
             left: 50%;
             transform: translateX(-50%) rotate(45deg);
             width: 8px;
             height: 8px;
-            background-color: #ffffff;                /* Matches white background */
-            border-right: 1px solid #007BFF;          /* Right border forms the right side of triangle */
-            border-bottom: 1px solid #007BFF;         /* Bottom border forms the left side of triangle */
+            background-color: #ffffff;
+            border-right: 1px solid #007BFF; 
+            border-bottom: 1px solid #007BFF; 
             box-sizing: border-box;
         }
 
