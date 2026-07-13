@@ -1,11 +1,12 @@
 const express = require('express');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+
 const app = express();
 const PORT = 4000;
 
 app.use(express.json());
-// Serve static frontend files (HTML/CSS) from a "public" folder
 app.use(express.static('public'));
 
 // 1. Search endpoint
@@ -15,32 +16,94 @@ app.get('/api/search', (req, res) => {
         return res.status(400).json({ error: "Missing query parameter 'q'" });
     }
 
-    // Safely wrap the query in quotes to pass to the CLI python script
     const command = `python image_retriever_ui.py search "${userQuery.replace(/"/g, '\\"')}"`;
 
     exec(command, (error, stdout, stderr) => {
         if (error) {
+            console.error(stderr);
             return res.status(500).json({ error: error.message });
         }
-        
+
         try {
-            // Parse the JSON string printed by your Python script
             const result = JSON.parse(stdout.trim());
             res.json(result);
         } catch (e) {
-            res.status(500).json({ error: "Failed to parse Python output", raw: stdout });
+            console.error(stdout);
+            res.status(500).json({
+                error: "Failed to parse Python output",
+                raw: stdout
+            });
         }
     });
 });
 
-// 2. Image serving endpoint 
-// Because your images live outside the web directory, Node handles sending them securely
+// 2. Image serving endpoint
 app.get('/api/image', (req, res) => {
     const imagePath = req.query.path;
-    if (!imagePath) return res.status(400).send("Path required");
-    
-    // Sends the local image file directly to the browser view
+    if (!imagePath) {
+        return res.status(400).send("Path required");
+    }
+
     res.sendFile(path.resolve(imagePath));
+});
+
+// 3. Open Folder endpoint
+app.post('/api/open-folder', (req, res) => {
+    const targetPath = req.query.path;
+    if (!targetPath) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'No path provided'
+        });
+    }
+
+    const resolved = path.resolve(targetPath);
+
+    if (!fs.existsSync(resolved)) {
+        return res.status(404).json({
+            status: 'error',
+            message: 'File does not exist.'
+        });
+    }
+
+    let child;
+
+    try {
+        if (process.platform === 'win32') {
+            // Reveal the selected file in Windows Explorer
+            child = spawn('explorer.exe', [`/select,${resolved}`], {
+                detached: true,
+                windowsHide: false,
+                stdio: 'ignore'
+            });
+        } else if (process.platform === 'darwin') {
+            // Reveal the file in Finder
+            child = spawn('open', ['-R', resolved], {
+                detached: true,
+                stdio: 'ignore'
+            });
+        } else {
+            // Open the containing folder on Linux
+            child = spawn('xdg-open', [path.dirname(resolved)], {
+                detached: true,
+                stdio: 'ignore'
+            });
+        }
+
+        child.on('error', (err) => {
+            console.error('Failed to launch file explorer:', err);
+        });
+
+        child.unref();
+
+        res.json({ status: 'success' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            status: 'error',
+            message: err.message
+        });
+    }
 });
 
 app.listen(PORT, () => {

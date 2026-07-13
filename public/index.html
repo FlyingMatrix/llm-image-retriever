@@ -4,15 +4,130 @@
     <meta charset="UTF-8">
     <title>Local Image Search Pipeline</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 800px; 
+            margin: 40px auto; 
+            padding: 20px; 
+            color: #333;
+            background-color: #fafafa;
+        }
+        h2 { color: #222; }
         .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
-        input { flex: 1; padding: 10px; font-size: 16px; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-        #result { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 20px; display: none; }
-        img { max-width: 100%; height: auto; margin-top: 15px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .citation { color: #555; font-style: italic; background: #f4f4f4; padding: 10px; border-left: 4px solid #007BFF; }
+        input { 
+            flex: 1; 
+            padding: 12px; 
+            font-size: 16px; 
+            border: 1px solid #ccc; 
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus { border-color: #007BFF; }
+        button { 
+            padding: 12px 24px; 
+            font-size: 16px; 
+            cursor: pointer; 
+            background-color: #007BFF; 
+            color: #fff; 
+            border: none; 
+            border-radius: 6px; 
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
         
-        /* New Style for Error Handling */
+        #result { margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; display: none; }
+        img { max-width: 100%; height: auto; margin-top: 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        
+        /* Modern Citation Container */
+        .citation-container { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: #ffffff; 
+            padding: 15px; 
+            border-left: 4px solid #007BFF; 
+            border-radius: 0 8px 8px 0;
+            gap: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .citation-text { color: #555; font-style: italic; margin: 0; font-size: 14px; }
+        .citation-actions { display: flex; gap: 10px; }
+        
+        /* Container for Tooltip Button Positioning */
+        .tooltip-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        /* Sleek Icon Buttons */
+        .icon-btn { 
+            background: #ffffff; 
+            border: 1px solid #e0e0e0; 
+            padding: 8px 12px; 
+            cursor: pointer; 
+            border-radius: 6px; 
+            font-size: 16px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .icon-btn:hover { 
+            background: #f5f5f5; 
+            border-color: #ccc;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .icon-btn:active {
+            transform: translateY(0);
+        }
+        
+        /* Updated Tooltip to Match Search Button Shape & Border Styling */
+        .tooltip {
+            position: absolute;
+            bottom: 135%; /* Places it perfectly above the button */
+            left: 50%;
+            transform: translateX(-50%) scale(0.85);
+            background-color: #ffffff;             /* White background filled in */
+            border: 2px solid #007BFF;             /* Blue border */
+            color: #333333;                        /* Dark-grey font color */
+            padding: 6px 12px;
+            border-radius: 6px;                      /* Same shape border-radius as buttons */
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28), transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+            pointer-events: none; /* Prevents mouse hover interference */
+        }
+
+        /* Updated Tooltip Pointer Triangle (Matching White/Blue Border Theme) */
+        .tooltip::after {
+            content: "";
+            position: absolute;
+            bottom: -5px;                         /* Shifts bottom point of the triangle slightly down */
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 8px;
+            height: 8px;
+            background-color: #ffffff;            /* Matches white background */
+            border-right: 1px solid #007BFF;      /* Right border forms the right side of triangle */
+            border-bottom: 1px solid #007BFF;     /* Bottom border forms the left side of triangle */
+            box-sizing: border-box;
+        }
+
+        .tooltip.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) scale(1);
+        }
+
+        /* Error Handling Style */
         .error-message { 
             margin-top: 20px; 
             padding: 15px; 
@@ -38,7 +153,16 @@
 
     <div id="result">
         <h3>Search Result (<span id="matchType"></span>)</h3>
-        <p class="citation"><strong>Citation Path:</strong> <span id="citationPath"></span></p>
+        <div class="citation-container">
+            <p class="citation-text"><strong>Citation Path:</strong> <span id="citationPath"></span></p>
+            <div class="citation-actions">
+                <div class="tooltip-container">
+                    <button class="icon-btn" onclick="copyCitationPath()" title="Copy Path">📋</button>
+                    <div id="copyTooltip" class="tooltip">Copied!</div>
+                </div>
+                <button class="icon-btn" onclick="openCitationFolder()" title="Open Folder">📁</button>
+            </div>
+        </div>
         <div id="imageContainer"></div>
     </div>
 
@@ -68,12 +192,10 @@
                         <img src="/api/image?path=${encodeURIComponent(data.image_path)}" alt="Search Result">
                     `;
                 } else {
-                    // Display backend error message directly on the page instead of an alert
                     showError(data.message || "No matching images found.");
                 }
             } catch (err) {
                 document.getElementById('loading').style.display = 'none';
-                // Display network/fetch error directly on the page
                 showError("An error occurred running the search.");
             }
         }
@@ -83,6 +205,42 @@
             const errorDiv = document.getElementById('errorMessage');
             errorDiv.innerText = message;
             errorDiv.style.display = 'block';
+        }
+
+        // Function to copy path to clipboard
+        async function copyCitationPath() {
+            const pathText = document.getElementById('citationPath').innerText;
+            if (!pathText) return;
+            
+            try {
+                await navigator.clipboard.writeText(pathText);
+                
+                // Show local tooltip
+                const tooltip = document.getElementById('copyTooltip');
+                tooltip.classList.add('show');
+                setTimeout(() => {
+                    tooltip.classList.remove('show');
+                }, 2000);
+            } catch (err) {
+                showError("Failed to copy path to clipboard.");
+            }
+        }
+
+        // Function to request backend to open the local folder
+        async function openCitationFolder() {
+            const pathText = document.getElementById('citationPath').innerText;
+            if (!pathText) return;
+
+            try {
+                const response = await fetch(`/api/open-folder?path=${encodeURIComponent(pathText)}`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.status !== 'success') {
+                    showError(data.message || "Failed to open folder.");
+                }
+            } catch (err) {
+                showError("An error occurred trying to open the folder.");
+            }
         }
     </script>
 </body>
