@@ -12,6 +12,7 @@
             color: #333;
             background-color: #fafafa;
         }
+
         h2 { color: #222; }
         .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
         input { 
@@ -85,7 +86,7 @@
             transform: translateY(0);
         }
         
-        /* Updated Tooltip to Match Search Button Shape & Border Styling */
+        /* Tooltip Styling */
         .tooltip {
             position: absolute;
             bottom: 135%; 
@@ -106,7 +107,6 @@
             pointer-events: none; 
         }
 
-        /* Updated Tooltip Pointer Triangle (Matching White/Blue Border Theme) */
         .tooltip::after {
             content: "";
             position: absolute;
@@ -143,7 +143,7 @@
 
     <h2>Project Image Search</h2>
     <div class="search-box">
-        <input type="text" id="queryInput" placeholder="e.g., show me a sample image from biotronik project">
+        <input type="text" id="queryInput" placeholder="e.g., show me a sample image from biotronik project" onkeydown="if(event.key === 'Enter') runSearch()">
         <button onclick="runSearch()">Search</button>
     </div>
 
@@ -166,6 +166,13 @@
         <div id="imageContainer"></div>
     </div>
 
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+      // Connect automatically to the server socket
+      const socket = io();
+    </script>
+
     <script>
         async function runSearch() {
             const query = document.getElementById('queryInput').value;
@@ -182,17 +189,20 @@
 
                 document.getElementById('loading').style.display = 'none';
 
-                if (data.status === 'success') {
+                // Server returns { userId, result: { status, type, citation, image_path, message } }
+                const searchResult = data.result;
+
+                if (searchResult && searchResult.status === 'success') {
                     document.getElementById('result').style.display = 'block';
-                    document.getElementById('matchType').innerText = data.type.toUpperCase() + " MATCH";
-                    document.getElementById('citationPath').innerText = data.citation;
+                    document.getElementById('matchType').innerText = (searchResult.type || 'SEARCH').toUpperCase() + " MATCH";
+                    document.getElementById('citationPath').innerText = searchResult.citation || '';
                     
                     // Request the image via your Node.js image serving endpoint
                     document.getElementById('imageContainer').innerHTML = `
-                        <img src="/api/image?path=${encodeURIComponent(data.image_path)}" alt="Search Result">
+                        <img src="/api/image?path=${encodeURIComponent(searchResult.image_path)}" alt="Search Result">
                     `;
                 } else {
-                    showError(data.message || "No matching images found.");
+                    showError((searchResult && searchResult.message) || data.error || "No matching images found.");
                 }
             } catch (err) {
                 document.getElementById('loading').style.display = 'none';
