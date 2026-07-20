@@ -1,6 +1,6 @@
 const express = require('express');
-const http = require('http'); // 1. Required for Socket.IO integration
-const { Server } = require('socket.io'); // 2. Socket.IO
+const http = require('http'); // Required for Socket.IO integration
+const { Server } = require('socket.io'); // Socket.IO
 const { execFile, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
