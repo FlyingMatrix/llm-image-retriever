@@ -19,6 +19,8 @@
   },
   "homepage": "https://github.com/FlyingMatrix/llm-image-retriever#readme",
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "socket.io": "^4.8.3"
   }
 }
