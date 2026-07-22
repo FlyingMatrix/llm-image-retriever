@@ -27,7 +27,9 @@ collection = client.get_or_create_collection(
 )
 
 def parse_query_with_llm(user_prompt: str, valid_projects: list) -> SearchParameters:
-    """Extracts search terms and maps the requested project to a strict valid list."""
+    """
+        Extracts search terms and maps the requested project to a strict valid list.
+    """
     system_instruction = (
         "You are an expert AI assistant for a local image search pipeline.\n"
         "Your task is to isolate what object/file description the user wants to see, "
@@ -54,7 +56,9 @@ def parse_query_with_llm(user_prompt: str, valid_projects: list) -> SearchParame
     return SearchParameters(**result_json)
 
 def handle_ingest(base_folder: str):
-    """Scans local project directories and builds/updates the vector database."""
+    """
+        Scans local project directories and builds/updates the vector database.
+    """
     supported = ('.png', '.jpg', '.jpeg', '.webp')
     if not os.path.exists(base_folder):
         rprint(f"[red][ERROR] Directory '{base_folder}' does not exist.[/red]")
@@ -81,9 +85,11 @@ def handle_ingest(base_folder: str):
         rprint("[red][WARNING] No supported images found to index.[/red]")
 
 def handle_query(human_query: str):
-    """Uses a dynamic baseline path to find valid projects, runs LLM parsing with 
-    strict text cleanup, and retrieves images using a hybrid case-insensitive 
-    filename-first + vector-fallback search approach."""
+    """
+        Uses a dynamic baseline path to find valid projects, runs LLM parsing with 
+        strict text cleanup, and retrieves images using a hybrid case-insensitive 
+        filename-first + vector-fallback search approach.
+    """
     
     # 1. Gather all data currently inside the database
     all_data = collection.get(include=['metadatas', 'uris'])
